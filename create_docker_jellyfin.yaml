@@ -1,0 +1,23 @@
+---
+- hosts: localhost
+  tasks:
+  - name: Deploy jellyfin
+    docker_container:
+      name: jellyfin
+      image: jellyfin/jellyfin
+      ports:
+        - 8096:8096
+      volumes:
+        - /mnt/ssd/jellyfin/config:/config
+        - /mnt/ssd/jellyfin/photos:/data/photos
+        - /mnt/ssd/jellyfin/music:/data/music
+        - /mnt/ssd/jellyfin/movies:/data/movies
+        - /mnt/ssd/jellyfin/series:/data/series
+      restart_policy: always
+      devices:
+        - /dev/dri/renderD128:/dev/dri/renderD128
+        - /dev/dri/card0:/dev/dri/card0     
+      env:
+        PUID: "1002"
+        PGID: "100"
+        TZ: "Europe/London"

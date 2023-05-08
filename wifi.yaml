@@ -1,0 +1,18 @@
+---
+- hosts: localhost
+  #remote_user: root
+  become: yes
+  tasks:
+  - name: Create the wifi connection
+    community.general.nmcli:
+      type: wifi
+      conn_name: {wifi_name}
+      # wlp0s20f3
+      ifname: wlo1
+      ssid: {wifi_name}
+      wifi_sec:
+        key-mgmt: wpa-psk
+        psk: {wifi_password}
+      autoconnect: true
+      state: present
+
