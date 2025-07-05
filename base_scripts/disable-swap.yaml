@@ -1,0 +1,18 @@
+---
+- name: Disable Swap and Remove from /etc/fstab
+  hosts: ubuntu
+  become: yes
+
+  tasks:
+    - name: Disable swap
+      command: swapoff -a
+
+    - name: Remove swap entry from /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        state: absent
+        regexp: '^.*\sswap\s.*$'
+      when: "'swap' in lookup('fstab', '/etc/fstab').keys()"
+
+    - name: Notify system to reload /etc/fstab
+      meta: flush_handlers

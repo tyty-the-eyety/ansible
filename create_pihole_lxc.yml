@@ -1,0 +1,134 @@
+ #
+---
+- name: Deploy pihole LXC on Proxmox via API
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  vars:
+    ansible_ssh_pass: "{{ proxmox_ansible_password  }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+
+  tasks:
+    - name: Ensure template is available
+      community.general.proxmox_template:
+        node: "{{ proxmox.node_name }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        storage: "{{ storage.templatepool }}"
+        content_type: vztmpl
+        template: "{{ storage.template }}"
+      run_once: true
+
+    - name: Create LxC Container
+      community.general.proxmox:
+        hostname: "{{ pihole.name }}"
+        vmid: "{{ pihole.vmid }}"
+        node: "{{ proxmox.node_name }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        ostemplate: "{{ storage.templatepool }}:vztmpl/{{ storage.template }}" 
+        storage: "{{ storage.pool }}"
+        state: present
+        onboot: true
+        netif: {"net0":"name=eth0,ip={{ pihole.ip_address }}/24,gw={{ network.gateway }},bridge=vmbr0"}
+        nameserver: "9.9.9.9 1.1.1.1"
+        password: "{{ proxmox.api_password }}"
+        unprivileged: true
+        features: "nesting=1"
+        memory: 1024
+        cores: 1
+        swap: 512
+        disk: 8
+        tags: "{{ pihole.tags }}"
+
+    - name: Start the Container
+      community.general.proxmox:
+        vmid: "{{ pihole.vmid }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        state: started
+        unprivileged: true
+
+    - name: Wait for LXC to be SSH accessible
+      wait_for:
+        host: "{{ pihole.ip_address }}"
+        port: 22
+        delay: 10
+        timeout: 300
+
+    - name: Enable SSH root login inside the LXC via lxc-attach
+      ansible.builtin.command: >
+        lxc-attach -n {{ pihole.vmid }} -- bash -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && systemctl restart ssh"
+      delegate_to: "{{ proxmox.api_host }}"
+      remote_user: "{{ proxmox_user }}"
+
+      
+- name: Configure Pi-hole inside LXC {{ pihole.vmid }}
+  hosts: pihole # This will connect to the newly created Pi-hole LXC
+  gather_facts: no
+  become: yes # Run commands as root inside the LXC
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  vars:
+    pihole_webpassword: "{{ pihole_web_password }}" # <--- IMPORTANT: SET A STRONG PASSWORD FOR PI-HOLE WEB UI!
+    ansible_user: "{{ proxmox_user }}"
+    ansible_ssh_pass: "{{ proxmox_ansible_password  }}"
+    ansible_ssh_common_args: "-o ControlMaster=auto -o ControlPersist=60s -o StrictHostKeyChecking=no"
+
+  tasks:
+    - name: Ensure Pi-hole LXC is updated
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Install curl
+      ansible.builtin.apt:
+        name: curl
+        state: present
+
+
+    - name: Create Pi-hole configuration directory
+      ansible.builtin.file:
+        path: /etc/pihole
+        state: directory
+        mode: '0755'
+
+    - name: Create Pi-hole setup variables
+      ansible.builtin.copy:
+        content: |
+          PIHOLE_INTERFACE=eth0
+          IPV4_ADDRESS=0.0.0.0/0
+          IPV6_ADDRESS=
+          PIHOLE_DNS_1=9.9.9.9
+          PIHOLE_DNS_2=1.1.1.1
+          QUERY_LOGGING=true
+          INSTALL_WEB_SERVER=true
+          INSTALL_WEB_INTERFACE=true
+          LIGHTTPD_ENABLED=true
+          CACHE_SIZE=10000
+          DNS_FQDN_REQUIRED=true
+          DNS_BOGUS_PRIV=true
+          DNSMASQ_LISTENING=single
+          WEBPASSWORD={{ pihole_webpassword | hash('sha256') | hash('sha256') }}
+          BLOCKING_ENABLED=true
+        dest: /etc/pihole/setupVars.conf
+        mode: '0644'
+
+    - name: Install Pi-hole
+      ansible.builtin.shell: |
+        curl -sSL https://install.pi-hole.net | bash /dev/stdin --unattended
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Ensure Pi-hole service is running
+      ansible.builtin.service:
+        name: pihole-FTL
+        state: started
+        enabled: yes

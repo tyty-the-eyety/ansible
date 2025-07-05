@@ -1,0 +1,19 @@
+---
+- hosts: localhost
+  vars:
+    portainer_container_name: portainer
+    portainer_image: portainer/portainer-ce
+    portainer_data_path: /mnt/ssd/portainer
+  tasks:
+  - name: Deploy Portainer
+    community.docker.docker_container:
+      name: "{{ portainer_container_name }}"
+      image: "{{ portainer_image }}"
+      ports:
+        - "9000:9000"
+        - "8000:8000"
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - "{{ portainer_data_path }}:/data"
+        - /etc/localtime:/etc/localtime:ro
+      restart_policy: always

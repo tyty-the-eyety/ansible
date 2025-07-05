@@ -1,0 +1,15 @@
+---
+- name: Create ansibleuser
+  hosts: ubuntu
+  become: true  # Run tasks with sudo
+
+  tasks:
+    - name: Add ansibleuser
+      user:
+        name: ansibleuser
+        password: ""  # Replace with the encrypted password
+        shell: /bin/bash
+        home: /home/ansibleuser
+        groups: sudo
+        createhome: yes
+      become_user: root  # Run this task as root

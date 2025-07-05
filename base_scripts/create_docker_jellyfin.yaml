@@ -1,0 +1,31 @@
+---
+- hosts: localhost
+  vars:
+    jellyfin_container_name: jellyfin
+    jellyfin_image: jellyfin/jellyfin
+    jellyfin_config_path: /mnt/ssd/jellyfin/config
+    jellyfin_photo_path: /mnt/ssd/jellyfin/photos
+    jellyfin_music_path: /mnt/ssd/jellyfin/music
+    jellyfin_movie_path: /mnt/ssd/jellyfin/movies
+    jellyfin_series_path: /mnt/ssd/jellyfin/series
+  tasks:
+  - name: Deploy jellyfin
+    community.docker.docker_container:
+      name: "{{ jellyfin_container_name }}"
+      image: "{{ jellyfin_image }}"
+      ports:
+        - 8096:8096
+      volumes:
+        - "{{ jellyfin_config_path }}:/config"
+        - "{{ jellyfin_photo_path }}:/data/photos"
+        - "{{ jellyfin_music_path }}:/data/music"
+        - "{{ jellyfin_movie_path }}:/data/movies"
+        - "{{ jellyfin_series_path }}:/data/series"
+      restart_policy: always
+      devices:
+        - /dev/dri/renderD128:/dev/dri/renderD128
+        - /dev/dri/card0:/dev/dri/card0
+      env:
+        PUID: "1002"
+        PGID: "100"
+        TZ: "Europe/London"

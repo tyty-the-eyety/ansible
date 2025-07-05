@@ -1,0 +1,23 @@
+---
+- hosts: localhost
+  become: yes
+
+  vars:
+    # You can define your Wi-Fi credentials here,
+    # or pass them securely via the command line, e.g.:
+    # ansible-playbook wifi.yaml -e "wifi_name=your_ssid" -e "wifi_password=your_password"
+    wifi_name: "YOUR_WIFI_SSID"
+    wifi_password: "YOUR_WIFI_PASSWORD"
+
+  tasks:
+  - name: Create the wifi connection
+    community.general.nmcli:
+      type: wifi
+      conn_name: "{{ wifi_name }}"
+      ifname: wlo1
+      ssid: "{{ wifi_name }}"
+      wifi_sec:
+        key-mgmt: wpa-psk
+        psk: "{{ wifi_password }}"
+      autoconnect: yes
+      state: present

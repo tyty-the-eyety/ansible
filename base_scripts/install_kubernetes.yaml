@@ -1,0 +1,29 @@
+---
+- name: Install K3s on master node
+  hosts: k8smaster
+  become: true
+  tasks:
+    - name: Install K3s on master
+      ansible.builtin.shell:
+        cmd: 'curl -sfL https://get.k3s.io | K3S_KUBECONFIG_MODE="644" INSTALL_K3S_EXEC="server --disable=traefik" sh -'
+        creates: /usr/local/bin/k3s
+
+- name: Get K3s join token from master
+  hosts: k8smaster
+  become: true
+  tasks:
+    - name: Get K3s join token
+      ansible.builtin.command:
+        cmd: cat /var/lib/rancher/k3s/server/node-token
+      register: k3s_token
+      changed_when: false
+
+- name: Install K3s on worker nodes
+  hosts: k8sworker
+  become: true
+  tasks:
+    - name: Install K3s on workers
+      ansible.builtin.shell:
+        cmd: |
+          curl -sfL https://get.k3s.io | K3S_URL=https://{{ hostvars[groups['k8smaster'][0]]['ansible_host'] }}:6443 K3S_TOKEN={{ hostvars[groups['k8smaster'][0]].k3s_token.stdout }} sh -
+        creates: /usr/local/bin/k3s

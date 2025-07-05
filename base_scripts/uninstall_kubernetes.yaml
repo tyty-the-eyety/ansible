@@ -1,0 +1,19 @@
+---
+- name: UnInstall K3s on master
+  hosts: k8smaster
+  become: yes
+  become_user: root
+  tasks:
+    - name: Install K3s on master
+      shell: "/usr/local/bin/k3s-uninstall.sh"
+
+
+
+- name: unInstall K3s on workers
+  hosts: k8sworker
+  become: yes
+  become_user: root
+  tasks:
+    - name: Install K3s on workers
+      shell: "/usr/local/bin/k3s-agent-uninstall.sh"
+

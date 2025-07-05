@@ -1,0 +1,31 @@
+---
+- name: Configure Docker Daemon
+  hosts: ubuntu
+  become: yes
+
+  tasks:
+    - name: Create Docker daemon directory
+      file:
+        path: /etc/docker
+        state: directory
+
+    - name: Create Docker daemon configuration file
+      copy:
+        content: |
+          {
+            "exec-opts": ["native.cgroupdriver=systemd"],
+            "log-driver": "json-file",
+            "log-opts": { "max-size": "100m" },
+            "storage-driver": "overlay2"
+          }
+        dest: /etc/docker/daemon.json
+
+    - name: Restart Docker
+      service:
+        name: docker
+        state: restarted
+
+    - name: Enable Docker on boot
+      service:
+        name: docker
+        enabled: yes

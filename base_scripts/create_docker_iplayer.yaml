@@ -1,0 +1,19 @@
+---
+- hosts: localhost
+  vars:
+    iplayer_container_name: get_iplayer
+    iplayer_image: kolonuk/get_iplayer
+    iplayer_config_path: /mnt/ssd/get_iplayer
+    iplayer_output_path: /mnt/ssd/get_iplayer/output
+  tasks:
+  - name: Deploy get_iplayer
+    community.docker.docker_container:
+      name: "{{ iplayer_container_name }}"
+      image: "{{ iplayer_image }}"
+      ports:
+        - "8181:8181"
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
+        - "{{ iplayer_config_path }}:/root/.get_iplayer"
+        - "{{ iplayer_output_path }}:/root/output"
+      restart_policy: unless-stopped

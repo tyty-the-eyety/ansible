@@ -1,6 +1,6 @@
 ---
 - name: Install Docker CE on Ubuntu
-  hosts: ubuntu
+  hosts: transmission
   become: yes
 
   tasks:
@@ -32,8 +32,3 @@
         name: docker-ce
         state: present
 
-    - name: Add ansibleuser to the docker group
-      user:
-        name: ansibleuser
-        groups: docker
-        append: yes

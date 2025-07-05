@@ -1,0 +1,14 @@
+---
+- name: Install intel media driver
+  hosts: localhost
+  become: yes 
+  tasks:
+    - name: Install driver on ubuntu 
+      apt:
+        name: intel-media-va-driver
+        state: present
+    - name: Install VaInfo  
+      apt:
+        name: vainfo
+        state: present
+

@@ -1,0 +1,14 @@
+---
+- name: Grant NOPASSWD sudo access to ansibleuser
+  hosts: ubuntu
+  become: true
+
+  tasks:
+    - name: Create sudoers file for ansibleuser
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/ansibleuser
+        content: "ansibleuser ALL=(ALL) NOPASSWD: ALL"
+        owner: root
+        group: root
+        mode: '0440'
+        validate: 'visudo -cf %s'

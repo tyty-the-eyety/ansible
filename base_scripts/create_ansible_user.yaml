@@ -1,0 +1,24 @@
+---
+- name: Create ansibleuser
+  hosts: ubuntu
+  become: true
+
+  vars:
+    # IMPORTANT: Replace this with your actual public SSH key.
+    # You can generate a new key pair with `ssh-keygen -t rsa -b 4096`
+    ansible_user_ssh_key: "ssh-rsa YOUR_PUBLIC_KEY_HERE"
+
+  tasks:
+    - name: Add ansibleuser
+      ansible.builtin.user:
+        name: ansibleuser
+        shell: /bin/bash
+        home: /home/ansibleuser
+        groups: sudo
+        createhome: yes
+
+    - name: Add SSH key for ansibleuser
+      ansible.posix.authorized_key:
+        user: ansibleuser
+        key: "{{ ansible_user_ssh_key }}"
+        state: present
