@@ -1,0 +1,46 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+env/
+venv/
+
+# Ansible-specific files
+*.retry
+*.log
+*.tar.gz
+*.zip
+
+# SSH and sensitive files
+*.pem
+*.key
+*.crt
+*.vault
+.vault_pass.txt
+.vault_password.txt
+
+# Inventory and host_vars/group_vars secrets
+inventories/*/host_vars/
+inventories/*/group_vars/
+host_vars/
+#group_vars/
+
+# Editor and OS files
+*.swp
+*.swo
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Roles dependencies
+roles/*/.galaxy_install_info
+roles/*/.python-version
+
+# Molecule testing
+.molecule/
+output/
+test/
