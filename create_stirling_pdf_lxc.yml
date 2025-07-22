@@ -1,0 +1,259 @@
+---
+- name: Build Stirling-PDF LXC Container
+  hosts: localhost
+  gather_facts: no
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  vars:
+    ansible_ssh_pass: "{{ proxmox_ansible_password  }}"
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+
+
+  tasks:
+    - name: Remove {{ stirling.ip_address }} from known_hosts on Ansible controller
+      ansible.builtin.command: ssh-keygen -R {{ stirling.ip_address }}
+      delegate_to: localhost
+      become: false
+
+    - name: Ensure template is available
+      community.general.proxmox_template:
+        node: "{{ proxmox.node_name }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        storage: "{{ storage.templatepool }}"
+        content_type: vztmpl
+        template: "{{ storage.template }}"
+      run_once: true
+
+    - name: Create stirling LxC Container
+      community.general.proxmox:
+        hostname: "{{ stirling.name }}"
+        vmid: "{{ stirling.vmid }}"
+        node: "{{ proxmox.node_name }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        ostemplate: "{{ storage.templatepool }}:vztmpl/{{ storage.template }}" 
+        storage: "{{ storage.pool }}"
+        state: present
+        onboot: true
+        netif: {"net0":"name=eth0,ip={{ stirling.ip_address }}/24,gw={{ network.gateway }},bridge=vmbr0"}
+        nameserver: "{{ stirling.dns }}"
+        password: "{{ lxc_password }}"
+        unprivileged: true
+        features: "{{ container_defaults.features }}"
+        memory: "{{ container_defaults.memory }}"
+        cores: "{{ container_defaults.cores }}"
+        swap: "{{ container_defaults.swap }}"
+        disk: "{{ container_defaults.disk }}"
+        tags: "{{ stirling.tags }}"
+
+    - name: Start the Container
+      community.general.proxmox:
+        vmid: "{{ stirling.vmid }}"
+        api_user: "{{ proxmox.api_user }}"
+        api_password: "{{ proxmox.api_password }}"
+        api_host: "{{ proxmox.api_host }}"
+        state: started
+        unprivileged: true
+
+    - name: Wait for LXC to be SSH accessible
+      wait_for:
+        host: "{{ stirling.ip_address }}"
+        port: 22
+        delay: 10
+        timeout: 300        
+
+    - name: Enable SSH root login inside the LXC via lxc-attach
+      ansible.builtin.command: >
+        lxc-attach -n {{ stirling.vmid }} -- bash -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && systemctl restart ssh"
+      delegate_to: "{{ proxmox.api_host }}"
+      remote_user: "{{ proxmox_user }}"
+
+
+### Now install inside the container
+- name: Configure Stirling-PDF inside LXC {{ stirling.vmid }}
+  hosts: stirling_pdf 
+  gather_facts: no
+  become: yes 
+  vars_files:
+    - group_vars/all.yml
+    - group_vars/vault.yml
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+    lxc_container_name: stirlingpdf-lxc
+    stirling_pdf_version_tag: "main" 
+    github_repo_url: "https://github.com/Stirling-Tools/Stirling-PDF.git"
+    app_jar_download_url: "https://files.stirlingpdf.com/Stirling-PDF.jar"
+    stirling_install_dir: "/opt/Stirling-PDF/"
+    jbig2enc_repo: "https://github.com/agl/jbig2enc.git"
+
+  tasks:
+    - name: Ensure LXC is updated
+      ansible.builtin.apt:
+        update_cache: yes
+        upgrade: yes
+      
+
+    - name: Install dependencies inside container
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - tzdata
+          - tini
+          - bash
+          - curl
+          - openssl
+          - libreoffice
+          - poppler-utils
+          - unpaper
+          - python3
+          - ocrmypdf
+          - libssl-dev 
+          - openjdk-17-jre-headless 
+          #- openjdk-21-jdk
+          - tesseract-ocr-eng
+          - tesseract-ocr-chi-sim
+          - tesseract-ocr-deu
+          - tesseract-ocr-fra
+          - tesseract-ocr-por
+          - python3-opencv 
+          - python3-pip 
+          - python3-pil 
+          - python3.11-venv
+          - fonts-urw-base35
+          - libcap2-bin 
+          - automake 
+          - autoconf 
+          - libtool 
+          - libleptonica-dev
+          - pkg-config
+          - zlib1g-dev 
+          - make 
+          - g++ 
+          - git
+          - 'tesseract-ocr-*'
+        state: present
+        update_cache: yes 
+
+
+    - name: Create .git directory in user's home
+      file:
+        path: "/root//.git"
+        state: directory
+        mode: '0755'
+    
+    - name: Clone jbig2enc repo
+      git:
+        repo: "{{ jbig2enc_repo }}"
+        dest: "/root/.git/jbig2enc"
+        update: no
+    
+    - name: Run autogen.sh
+      command: ./autogen.sh
+      args:
+        chdir: "/root/.git/jbig2enc"
+    
+    - name: Run configure
+      command: ./configure
+      args:
+        chdir: "/root/.git/jbig2enc"
+    
+    - name: Compile jbig2enc
+      command: make
+      args:
+        chdir: "/root/.git/jbig2enc"
+    
+    - name: Install jbig2enc
+      command: make install
+      args:
+        chdir: "/root/.git/jbig2enc"
+      become: true
+
+    - name: Install Python packages with --break-system-packages
+      ansible.builtin.command: >
+        pip3 install uno opencv-python-headless unoserver pngquant WeasyPrint --break-system-packages
+      args:
+        creates: /usr/local/bin/unoserver
+
+    - name: Create Stirling-PDF directory
+      ansible.builtin.file:
+        path: "{{ stirling_install_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+    
+    - name: Download Stirling-PDF application JAR from GitHub Releases
+      ansible.builtin.get_url:
+        url: "{{ app_jar_download_url }}"
+        dest: "{{ stirling_install_dir }}"
+        mode: '0644'
+
+    - name: Clone Stirling-PDF repo
+      ansible.builtin.git:
+        repo: "{{ github_repo_url }}"
+        dest: /tmp/Stirling-PDF
+        version: main
+        depth: 1
+   
+    - name: Copy scripts folder to target location
+      ansible.builtin.copy:
+        src: /tmp/Stirling-PDF/scripts
+        dest: "{{ stirling_install_dir }}/scripts"
+        remote_src: yes
+      become: true
+    - name: Create .env file for Stirling-PDF
+      ansible.builtin.file:
+        path: "{{ stirling_install_dir }}/.env"
+        state: touch
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
+    
+    - name: Create systemd service file for Stirling-PDF
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/stirlingpdf.service
+        content: |
+          [Unit]
+          Description=Stirling-PDF service
+          After=syslog.target network.target
+    
+          [Service]
+          SuccessExitStatus=143
+    
+          User=root
+          Group=root
+    
+          Type=simple
+    
+          EnvironmentFile=/opt/Stirling-PDF/.env
+          WorkingDirectory=/opt/Stirling-PDF
+          ExecStart=/usr/bin/java -jar Stirling-PDF.jar
+          ExecStop=/bin/kill -15 $MAINPID
+    
+          [Install]
+          WantedBy=multi-user.target
+        owner: root
+        group: root
+        mode: '0644'
+      become: true
+    
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+    
+    - name: Enable Stirling-PDF service
+      ansible.builtin.systemd:
+        name: stirlingpdf.service
+        enabled: true
+      become: true
+    - name: Start Stirling-PDF service
+      ansible.builtin.systemd:
+        name: stirlingpdf.service
+        state: started
+      become: true
