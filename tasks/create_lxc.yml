@@ -1,0 +1,53 @@
+# tasks/create_lxc.yml
+- name: Ensure template is available
+  community.general.proxmox_template:
+    node: "{{ proxmox_node }}"
+    api_user: "{{ proxmox_user }}"
+    api_password: "{{ proxmox_password }}"
+    api_host: "{{ proxmox_host }}"
+    storage: "{{ template_pool }}"
+    content_type: vztmpl
+    template: "{{ template_file }}"
+  run_once: true
+
+- name: Create LXC
+  community.general.proxmox:
+    vmid: "{{ lxc_vmid }}"
+    hostname: "{{ lxc_name }}"
+    node: "{{ proxmox_node }}"
+    api_user: "{{ proxmox_user }}"
+    api_password: "{{ proxmox_password }}"
+    api_host: "{{ proxmox_host }}"
+    ostemplate: "{{ template_pool }}:vztmpl/{{ template_file }}"
+    storage: "{{ lxc_storage }}"
+    netif: {"net0":"name=eth0,ip={{ lxc_ip }}/24,gw={{ lxc_gateway }},bridge=vmbr0"}
+    password: "{{ lxc_cont_password }}"
+    unprivileged: true
+    onboot: true
+    memory: "{{ lxc_memory }}"
+    cores: "{{ lxc_cores }}"
+    disk: "{{ lxc_disk }}"
+    swap: "{{ lxc_swap }}"
+    tags: "{{ lxc_tags }}"
+    state: present
+
+- name: Start the container
+  community.general.proxmox:
+    vmid: "{{ lxc_vmid }}"
+    api_user: "{{ proxmox.api_user }}"
+    api_password: "{{ proxmox.api_password }}"
+    api_host: "{{ proxmox.api_host }}"
+    state: started
+
+- name: Wait for SSH access
+  wait_for:
+    host: "{{ lxc_ip }}"
+    port: 22
+    delay: 10
+    timeout: 300
+
+- name: Enable SSH root login in container
+  ansible.builtin.command: >
+    lxc-attach -n "{{ lxc_vmid }}" -- bash -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && systemctl restart ssh"
+  delegate_to: "{{ proxmox.api_host }}"
+  remote_user: "{{ proxmox_user }}"

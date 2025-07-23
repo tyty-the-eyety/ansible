@@ -15,60 +15,25 @@
       delegate_to: localhost
       become: false
 
-    - name: Ensure LXC template is available
-      community.general.proxmox_template:
-        node: "{{ proxmox.node_name }}"
-        api_user: "{{ proxmox.api_user }}"
-        api_password: "{{ proxmox.api_password }}"
-        api_host: "{{ proxmox.api_host }}"
-        storage: "{{ storage.templatepool }}"
-        content_type: vztmpl
-        template: "{{ storage.template }}"
-      run_once: true
-
-    - name: Create LXC container for Stirling-PDF
-      community.general.proxmox:
-        hostname: "{{ stirling.name }}"
-        vmid: "{{ stirling.vmid }}"
-        node: "{{ proxmox.node_name }}"
-        api_user: "{{ proxmox.api_user }}"
-        api_password: "{{ proxmox.api_password }}"
-        api_host: "{{ proxmox.api_host }}"
-        ostemplate: "{{ storage.templatepool }}:vztmpl/{{ storage.template }}"
-        storage: "{{ storage.pool }}"
-        state: present
-        onboot: true
-        netif: {"net0": "name=eth0,ip={{ stirling.ip_address }}/24,gw={{ network.gateway }},bridge=vmbr0"}
-        nameserver: "{{ stirling.dns }}"
-        password: "{{ lxc_password }}"
-        unprivileged: true
-        features: "{{ container_defaults.features }}"
-        memory: "{{ container_defaults.memory }}"
-        cores: "{{ container_defaults.cores }}"
-        swap: "{{ container_defaults.swap }}"
-        disk: "{{ container_defaults.disk }}"
-        tags: "{{ stirling.tags }}"
-
-    - name: Start the container
-      community.general.proxmox:
-        vmid: "{{ stirling.vmid }}"
-        api_user: "{{ proxmox.api_user }}"
-        api_password: "{{ proxmox.api_password }}"
-        api_host: "{{ proxmox.api_host }}"
-        state: started
-
-    - name: Wait for SSH access
-      wait_for:
-        host: "{{ stirling.ip_address }}"
-        port: 22
-        delay: 10
-        timeout: 300
-
-    - name: Enable SSH root login in container
-      ansible.builtin.command: >
-        lxc-attach -n {{ stirling.vmid }} -- bash -c "sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config && systemctl restart ssh"
-      delegate_to: "{{ proxmox.api_host }}"
-      remote_user: "{{ proxmox_user }}"
+    - import_tasks: tasks/create_lxc.yml
+      vars:
+        lxc_name: "{{ stirling.name }}"
+        lxc_vmid: "{{ stirling.vmid }}"
+        lxc_ip: "{{ stirling.ip_address }}"
+        lxc_gateway: "{{ network.gateway }}"
+        lxc_cont_password: "{{ lxc_password }}"
+        lxc_storage: "{{ storage.pool }}"
+        lxc_memory: "{{ container_defaults.memory }}"
+        lxc_cores: "{{ container_defaults.cores }}"
+        lxc_disk: "{{ container_defaults.disk }}"
+        lxc_swap: "{{ container_defaults.swap }}"
+        lxc_tags: "{{ stirling.tags }}" 
+        proxmox_node: "{{ proxmox.node_name }}"
+        proxmox_user: "{{ proxmox.api_user }}"
+        proxmox_password: "{{ proxmox.api_password }}"
+        proxmox_host: "{{ proxmox.api_host }}"
+        template_pool: "{{ storage.templatepool }}"
+        template_file: "{{ storage.template }}"
 
 
 - name: Configure Stirling-PDF Inside LXC

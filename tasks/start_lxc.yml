@@ -1,0 +1,7 @@
+- name: Start the container
+  community.general.proxmox:
+    vmid: "{{ lxc_vmid }}"
+    api_user: "{{ proxmox.api_user }}"
+    api_password: "{{ proxmox.api_password }}"
+    api_host: "{{ proxmox.api_host }}"
+    state: started
